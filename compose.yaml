@@ -8,8 +8,8 @@ services:
     restart: unless-stopped
     environment:
       ITEMS: |
-          wikipedia   wikipedia_en_all_maxi_
           wiktionary  wiktionary_en_all_nopic_
+          wikipedia   wikipedia_en_all_maxi_
           gutenberg   gutenberg_en_all_
           zimit       medlineplus.gov_en_all_
           zimit       www.ready.gov_en_
