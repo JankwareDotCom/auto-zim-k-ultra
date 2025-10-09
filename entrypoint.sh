@@ -22,7 +22,7 @@ latest_remote() {
     | awk '$5 ~ /\.zim$/ {print $5}' \
     | grep -E "^${prefix}.*\.zim$" \
     | grep -E "$DATE_RE" \
-    | sort -t_ -kNF -kNF.1,1 \
+    | sort -V \
     | tail -n1
 }
 
@@ -49,7 +49,7 @@ sync_once() {
     # prune old versions (keep latest + KEEP)
     mapfile -t files < <(ls -1 "$DEST"/"${PREFIX}"*.zim 2>/dev/null \
       | grep -E "$DATE_RE" \
-      | sort -t_ -kNF -kNF.1,1)
+      | sort -V)
     local to_remove=$(( ${#files[@]} - (KEEP + 1) ))
     if (( to_remove > 0 )); then
       for f in "${files[@]:0:to_remove}"; do
