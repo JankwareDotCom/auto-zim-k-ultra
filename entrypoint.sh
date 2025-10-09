@@ -139,6 +139,11 @@ sync_once() {
   done < /items.conf
 }
 
+if [ "${1:-}" = "--oneshot" ]; then
+  sync_once
+  exit 0
+fi
+
 # updater loop (background)
 (
   while true; do
@@ -146,6 +151,12 @@ sync_once() {
     sleep "$UPDATE_SECS"
   done
 ) &
+
+# wait for at least one ZIM on first boot if requested
+if [ "${WAIT_FOR_FIRST:-0}" = "1" ]; then
+  echo "[wait] waiting for first ZIM to arrive ..."
+  until ls -1 "$DEST"/*.zim >/dev/null 2>&1; do sleep 5; done
+fi
 
 # serve in foreground; auto-reloads on library changes
 exec kiwix-serve --library "$LIBRARY" --monitorLibrary --port "$PORT"
