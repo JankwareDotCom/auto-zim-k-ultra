@@ -3,92 +3,40 @@ set -euo pipefail
 
 DEST="${DEST:-/data/zim}"
 LIBRARY="${LIBRARY:-/data/library.xml}"
-RSYNC_ROOT="${RSYNC_ROOT:-rsync://master.download.kiwix.org/download.kiwix.org/zim}"
 UPDATE_SECS=$(( ${UPDATE_INTERVAL_HOURS:-24} * 3600 ))
 KEEP=${KEEP_OLD_VERSIONS:-0}
 PORT="${PORT:-8080}"
 ITEM_DELAY="${ITEM_DELAY_SECONDS:-5}"
-LIST_RETRIES="${LIST_RETRIES:-4}"
-GET_RETRIES="${GET_RETRIES:-4}"
-PREFER_FETCH="${PREFER_FETCH:-rsync,http}"   # order to try
+HTTP_BASE="${HTTP_BASE:-https://download.kiwix.org/zim}"
+WAIT_FOR_FIRST="${WAIT_FOR_FIRST:-0}"
 
 DATE_RE='.*_[0-9]{4}-[0-9]{2}\.zim$'
-HTTP_BASE="https://download.kiwix.org/zim"
 
 mkdir -p "$DEST"
 touch "$LIBRARY" || true
 
 log(){ echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
 
-rsync_list() {
-  local sub="$1" ; rsync --list-only "$RSYNC_ROOT/$sub/" 2>&1
-}
-
-rsync_get() {
-  local sub="$1" name="$2" ; rsync -v --progress "$RSYNC_ROOT/$sub/$name" "$DEST/" 2>&1
-}
-
 http_list() {
+  # prints *.zim filenames in a directory
   local sub="$1"
-  # returns plain list of *.zim filenames from HTML index
   curl -fsSL "$HTTP_BASE/$sub/" \
     | grep -oE 'href="[^"]+\.zim"' \
     | sed -E 's/^href="//; s/"$//'
 }
 
-http_get() {
+latest_from_prefix() {
+  local sub="$1" prefix="$2"
+  http_list "$sub" \
+    | grep -E "^${prefix}.*\.zim$" \
+    | grep -E "$DATE_RE" \
+    | sort -V \
+    | tail -n1
+}
+
+download_http() {
   local sub="$1" name="$2"
   curl -fL --retry 5 --retry-delay 3 -o "$DEST/$name" "$HTTP_BASE/$sub/$name"
-}
-
-list_latest() {
-  # tries fetchers in preferred order, outputs the latest matching filename
-  local sub="$1" prefix="$2" out="" rc=0
-  IFS=',' read -ra methods <<< "$PREFER_FETCH"
-  for m in "${methods[@]}"; do
-    for ((i=1;i<=LIST_RETRIES;i++)); do
-      if [[ "$m" == "rsync" ]]; then
-        out="$(rsync_list "$sub" || true)"
-        rc=$?
-        # rsync emits errors on stderr; ensure we only keep filenames
-        if [[ $rc -eq 0 ]]; then
-          out="$(printf '%s\n' "$out" | awk '$5 ~ /\.zim$/ {print $5}')"
-        fi
-      else
-        out="$(http_list "$sub" || true)"
-        rc=$?
-      fi
-
-      if [[ $rc -eq 0 && -n "$out" ]]; then
-        # filter by prefix & known date pattern, then pick newest
-        printf '%s\n' "$out" \
-          | grep -E "^${prefix}.*\.zim$" \
-          | grep -E "$DATE_RE" \
-          | sort -V \
-          | tail -n1
-        return 0
-      fi
-
-      sleep $((i*2))  # backoff
-    done
-  done
-  return 1
-}
-
-get_file() {
-  local sub="$1" name="$2" rc=1
-  IFS=',' read -ra methods <<< "$PREFER_FETCH"
-  for m in "${methods[@]}"; do
-    for ((i=1;i<=GET_RETRIES;i++)); do
-      if [[ "$m" == "rsync" ]]; then
-        rsync_get "$sub" "$name" && return 0 || rc=$?
-      else
-        http_get "$sub" "$name" && return 0 || rc=$?
-      fi
-      sleep $((i*2))
-    done
-  done
-  return $rc
 }
 
 prune_old_versions() {
@@ -100,63 +48,62 @@ prune_old_versions() {
   if (( to_remove > 0 )); then
     for f in "${files[@]:0:to_remove}"; do
       local base="$(basename "$f")"
-      # remove from library if present; ignore errors
       id=$(kiwix-manage "$LIBRARY" show 2>/dev/null | awk -v z="$base" '$2 ~ z {print $1}')
       [[ -n "${id:-}" ]] && kiwix-manage "$LIBRARY" remove "$id" || true
-      rm -f -- "$f"
-      log "Pruned $base"
+      rm -f -- "$f"; log "Pruned $base"
     done
   fi
 }
 
 sync_once() {
-  while read -r SUBDIR PREFIX; do
+  while read -r SUBDIR NAME; do
     [[ -z "${SUBDIR// }" || "$SUBDIR" =~ ^# ]] && continue
 
-    local latest
-    latest="$(list_latest "$SUBDIR" "$PREFIX" || true)"
-    if [[ -z "$latest" ]]; then
-      log "No match for $SUBDIR/${PREFIX}*.zim (all sources failed)"
-      sleep "$ITEM_DELAY"
-      continue
-    fi
-
-    local destfile="$DEST/$latest"
-    if [[ -f "$destfile" ]]; then
-      log "Up to date: $latest"
+    local target="$NAME"
+    if [[ "$NAME" =~ \.zim$ ]]; then
+      # exact filename (e.g. ..._latest.zim or a specific release)
+      :
     else
-      log "Downloading $SUBDIR/$latest"
-      if get_file "$SUBDIR" "$latest"; then
-        kiwix-manage "$LIBRARY" add "$destfile" || true
-        log "Added to library: $latest"
-      else
-        log "Download failed for $latest"
+      # treat as prefix
+      target="$(latest_from_prefix "$SUBDIR" "$NAME" || true)"
+      if [[ -z "$target" ]]; then
+        log "No match via HTTP for $SUBDIR/${NAME}*.zim"
+        sleep "$ITEM_DELAY"; continue
       fi
     fi
 
-    prune_old_versions "$PREFIX"
+    local destfile="$DEST/$target"
+    if [[ -f "$destfile" ]]; then
+      log "Up to date: $target"
+    else
+      log "Downloading $SUBDIR/$target"
+      if download_http "$SUBDIR" "$target"; then
+        kiwix-manage "$LIBRARY" add "$destfile" || true
+        log "Added to library: $target"
+      else
+        log "Download failed: $target"
+      fi
+    fi
+
+    # rotate only for prefix-tracked items
+    [[ "$NAME" =~ \.zim$ ]] || prune_old_versions "$NAME"
     sleep "$ITEM_DELAY"
   done < /items.conf
 }
 
-if [ "${1:-}" = "--oneshot" ]; then
-  sync_once
-  exit 0
+# allow manual bootstrap
+if [[ "${1:-}" == "--oneshot" ]]; then
+  sync_once; exit 0
 fi
 
-# updater loop (background)
-(
-  while true; do
-    sync_once
-    sleep "$UPDATE_SECS"
-  done
-) &
+# background updater loop
+( while true; do sync_once; sleep "$UPDATE_SECS"; done ) &
 
-# wait for at least one ZIM on first boot if requested
-if [ "${WAIT_FOR_FIRST:-0}" = "1" ]; then
-  echo "[wait] waiting for first ZIM to arrive ..."
+# optional: wait until at least one ZIM exists before serving
+if [[ "$WAIT_FOR_FIRST" = "1" ]]; then
+  log "Waiting for first ZIM..."
   until ls -1 "$DEST"/*.zim >/dev/null 2>&1; do sleep 5; done
 fi
 
-# serve in foreground; auto-reloads on library changes
+# serve in foreground; auto-reload on library changes
 exec kiwix-serve --library "$LIBRARY" --monitorLibrary --port "$PORT"
