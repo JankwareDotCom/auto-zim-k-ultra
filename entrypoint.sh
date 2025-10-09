@@ -93,6 +93,13 @@ sync_once() {
   done < /items.conf
 }
 
+# write config from compose (if provided)
+if [ -n "${ITEMS:-}" ]; then
+  # normalize CRLF just in case
+  printf '%s\n' "$ITEMS" | sed 's/\r$//' > /items.conf
+  echo "[config] Wrote $(wc -l < /items.conf) lines to /items.conf from \$ITEMS"
+fi
+
 # allow manual bootstrap
 if [[ "${1:-}" == "--oneshot" ]]; then
   sync_once; exit 0
