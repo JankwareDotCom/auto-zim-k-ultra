@@ -13,8 +13,11 @@ HTTP_BASE="${HTTP_BASE:-https://download.kiwix.org/zim}"
 WAIT_FOR_FIRST="${WAIT_FOR_FIRST:-0}"
 
 DATE_RE='.*_[0-9]{4}-[0-9]{2}\.zim$'
+TMP_DIR="${TMP_DIR:-$DEST/.tmp}"
 
+mkdir -p "$TMP_DIR"
 mkdir -p "$DEST"
+
 touch "$LIBRARY" || true
 
 log(){ echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
@@ -37,8 +40,58 @@ latest_from_prefix() {
 }
 
 download_http() {
+  # $1=subdir, $2=filename (exact)
   local sub="$1" name="$2"
-  curl -fL --retry 5 --retry-delay 3 -o "$DEST/$name" "$HTTP_BASE/$sub/$name"
+  local final="$DEST/$name"
+  local part="$TMP_DIR/$name.part"
+  local sha_remote="$HTTP_BASE/$sub/$name.sha256"
+
+  mkdir -p "$(dirname "$part")"
+
+  # resume if partial exists
+  curl -fL --retry 5 --retry-delay 3 -C - -o "$part" "$HTTP_BASE/$sub/$name"
+
+  # try checksum verification first
+  if curl -fsSL "$sha_remote" -o "$part.sha256"; then
+    # accept either "HASH  FILE" or "SHA256 (FILE) = HASH"
+    if grep -qi '^sha256 ' "$part.sha256"; then
+      # transform "SHA256 (file) = hash" -> "hash  file"
+      awk '
+        BEGIN{IGNORECASE=1}
+        match($0,/=\s*([0-9a-f0-9]{64})/,m){hash=m[1]}
+        match($0,/^\s*SHA256\s*\(([^)]+)\)/,f){file=f[1]}
+        END{ if(hash!=""&&file!="") printf("%s  %s\n",hash,file) }
+      ' "$part.sha256" > "$part.sha256sum"
+    else
+      # assume "hash  filename" or "hash filename"
+      awk '{print $1"  "$2}' "$part.sha256" > "$part.sha256sum"
+    fi
+
+    # point the check at the *actual path* we just downloaded to
+    # rewrite filename in the checksum line to our $part path
+    hash="$(awk '{print $1}' "$part.sha256sum")"
+    echo "$hash  $part" > "$part.sha256sum"
+
+    if ! sha256sum -c "$part.sha256sum"; then
+      echo "[verify] SHA256 failed for $name; keeping partial for resume."
+      return 1
+    fi
+  else
+    # fallback: compare size with Content-Length
+    cl=$(curl -fsSI "$HTTP_BASE/$sub/$name" | awk 'tolower($1)=="content-length:"{print $2}' | tr -d '\r')
+    if [ -n "$cl" ]; then
+      size=$(stat -c %s "$part" 2>/dev/null || wc -c <"$part")
+      if [ "$size" != "$cl" ]; then
+        echo "[verify] Size mismatch for $name (have $size, need $cl); keeping partial for resume."
+        return 1
+      fi
+    fi
+  fi
+
+  # passed verification -> atomic move then clean up
+  mv -f "$part" "$final"
+  rm -f "$part.sha256" "$part.sha256sum"
+  return 0
 }
 
 prune_old_versions() {
@@ -59,36 +112,47 @@ prune_old_versions() {
 
 sync_once() {
   while read -r SUBDIR NAME; do
+    # skip blanks and comments
     [[ -z "${SUBDIR// }" || "$SUBDIR" =~ ^# ]] && continue
 
+    # Decide whether NAME is an exact filename (*.zim) or a prefix
     local target="$NAME"
     if [[ "$NAME" =~ \.zim$ ]]; then
-      # exact filename (e.g. ..._latest.zim or a specific release)
+      # exact file (e.g., ..._latest.zim or a specific month)
       :
     else
-      # treat as prefix
+      # NAME is a prefix; resolve the latest available filename via HTTP listing
       target="$(latest_from_prefix "$SUBDIR" "$NAME" || true)"
       if [[ -z "$target" ]]; then
         log "No match via HTTP for $SUBDIR/${NAME}*.zim"
-        sleep "$ITEM_DELAY"; continue
+        sleep "$ITEM_DELAY"
+        continue
       fi
     fi
 
     local destfile="$DEST/$target"
+
     if [[ -f "$destfile" ]]; then
+      # already have the final, verified file
       log "Up to date: $target"
     else
+      # === guarded download + verify + atomic move ===
       log "Downloading $SUBDIR/$target"
       if download_http "$SUBDIR" "$target"; then
+        # only after download_http() verifies and atomically moves .part -> final
         kiwix-manage "$LIBRARY" add "$destfile" || true
         log "Added to library: $target"
       else
-        log "Download failed: $target"
+        # on failure/partial, we do nothing except keep the .part for resume
+        log "Download/verify not complete yet for: $target (will resume next run)"
       fi
     fi
 
-    # rotate only for prefix-tracked items
-    [[ "$NAME" =~ \.zim$ ]] || prune_old_versions "$NAME"
+    # rotate older versions only for prefix-tracked items
+    if [[ ! "$NAME" =~ \.zim$ ]]; then
+      prune_old_versions "$NAME"
+    fi
+
     sleep "$ITEM_DELAY"
   done < /items.conf
 }
