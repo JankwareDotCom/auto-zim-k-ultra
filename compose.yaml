@@ -6,7 +6,3 @@ services:
     volumes:
       - ./data:/data
     restart: unless-stopped
-environment:
-  UPDATE_INTERVAL_HOURS: "12"
-  KEEP_OLD_VERSIONS: "1"
-  PORT: "80"
