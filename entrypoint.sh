@@ -93,11 +93,10 @@ sync_once() {
   done < /items.conf
 }
 
-# write config from compose (if provided)
 if [ -n "${ITEMS:-}" ]; then
-  # normalize CRLF just in case
-  printf '%s\n' "$ITEMS" | sed 's/\r$//' > /items.conf
-  echo "[config] Wrote $(wc -l < /items.conf) lines to /items.conf from \$ITEMS"
+  # turn literal \n into real newlines; strip Windows CR
+  printf '%b' "$ITEMS" | tr -d '\r' > /items.conf
+  echo "[config] wrote $(wc -l < /items.conf) lines from \$ITEMS"
 fi
 
 # allow manual bootstrap
