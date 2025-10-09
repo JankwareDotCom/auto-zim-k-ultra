@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "[bootstrap] HTTP-only updater active; no rsync calls will be made."
+
 DEST="${DEST:-/data/zim}"
 LIBRARY="${LIBRARY:-/data/library.xml}"
 UPDATE_SECS=$(( ${UPDATE_INTERVAL_HOURS:-24} * 3600 ))
