@@ -2,9 +2,9 @@ FROM ghcr.io/kiwix/kiwix-tools:3.7.0
 
 # minimal extras: bash + rsync
 RUN if command -v apk >/dev/null 2>&1; then \
-      apk add --no-cache bash rsync coreutils ca-certificates; \
+      apk add --no-cache bash rsync coreutils curl ca-certificates; \
     elif command -v apt-get >/dev/null 2>&1; then \
-      apt-get update && apt-get install -y --no-install-recommends bash rsync ca-certificates && rm -rf /var/lib/apt/lists/*; \
+      apt-get update && apt-get install -y --no-install-recommends bash rsync curl ca-certificates && rm -rf /var/lib/apt/lists/*; \
     else \
       echo "No supported package manager found" && exit 1; \
     fi
