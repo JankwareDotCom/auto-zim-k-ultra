@@ -44,4 +44,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            KIWIX_BASE=ghcr.io/kiwix/kiwix-tools:3.7
+            KIWIX_BASE=ghcr.io/kiwix/kiwix-tools:3.7.0

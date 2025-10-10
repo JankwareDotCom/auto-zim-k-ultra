@@ -1,4 +1,4 @@
-ARG KIWIX_BASE=ghcr.io/kiwix/kiwix-tools:3.7
+ARG KIWIX_BASE=ghcr.io/kiwix/kiwix-tools:3.7.0
 FROM ${KIWIX_BASE}
 
 # minimal extras
