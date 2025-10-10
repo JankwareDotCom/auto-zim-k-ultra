@@ -14,6 +14,7 @@ WAIT_FOR_FIRST="${WAIT_FOR_FIRST:-0}"
 
 DATE_RE='.*_[0-9]{4}-[0-9]{2}\.zim$'
 TMP_DIR="${TMP_DIR:-$DEST/.tmp}"
+TMP_MAX_AGE_DAYS="${TMP_MAX_AGE_DAYS:-14}"
 
 mkdir -p "$TMP_DIR"
 mkdir -p "$DEST"
@@ -38,6 +39,16 @@ latest_from_prefix() {
     | sort -V \
     | tail -n1
 }
+
+sweep_temp() {
+  local dir="${TMP_DIR:-$DEST/.tmp}"
+  [ -d "$dir" ] || return 0
+  # delete very old partials
+  find "$dir" -type f -name '*.part' -mtime +"$TMP_MAX_AGE_DAYS" -print -delete || true
+  # clean stray checksum helpers older than a day
+  find "$dir" -type f \( -name '*.sha256' -o -name '*.sha256sum' \) -mtime +1 -print -delete || true
+}
+
 
 download_http() {
   # $1=subdir, $2=filename (exact)
@@ -110,6 +121,65 @@ prune_old_versions() {
   fi
 }
 
+build_allowlist() {
+  ALLOWLIST="$(mktemp)"
+  # Guard if config is missing
+  [ -f /items.conf ] || { : > "$ALLOWLIST"; return; }
+
+  # Create list of allowed basenames from config
+  while read -r SUBDIR NAME; do
+    [[ -z "${SUBDIR// }" || "$SUBDIR" =~ ^# ]] && continue
+    if [[ "$NAME" =~ \.zim$ ]]; then
+      # exact file tracking
+      echo "$NAME" >> "$ALLOWLIST"
+    else
+      # prefix tracking: allow any local file matching the prefix
+      for f in "$DEST"/"${NAME}"*.zim; do
+        [ -e "$f" ] || continue
+        basename "$f" >> "$ALLOWLIST"
+      done
+    fi
+  done < /items.conf
+}
+
+prune_unlisted() {
+  [ "$PRUNE_UNLISTED" = "1" ] || return 0
+
+  build_allowlist
+
+  # map library: basename -> id
+  declare -A LIBMAP
+  while read -r id path; do
+    base="$(basename "$path")"
+    LIBMAP["$base"]="$id"
+  done < <(kiwix-manage "$LIBRARY" show 2>/dev/null | awk '$2 ~ /\.zim$/ {print $1, $2}')
+
+  # evaluate local files
+  shopt -s nullglob
+  for f in "$DEST"/*.zim; do
+    base="$(basename "$f")"
+    if ! grep -qxF "$base" "$ALLOWLIST"; then
+      # honor grace window to avoid racing brand-new files
+      if find "$DEST" -maxdepth 1 -name "$base" -mmin +"$((UNLISTED_GRACE_HOURS*60))" | grep -q .; then
+        if [ "$UNLISTED_DRY_RUN" = "1" ]; then
+          log "[dry-run] would remove unlisted: $base"
+          [ -n "${LIBMAP[$base]:-}" ] && log "[dry-run] would kiwix-manage remove ${LIBMAP[$base]}"
+        else
+          if [ -n "${LIBMAP[$base]:-}" ]; then
+            kiwix-manage "$LIBRARY" remove "${LIBMAP[$base]}" || true
+            log "Removed from library: $base"
+          fi
+          rm -f -- "$f"
+          log "Deleted unlisted file: $base"
+        fi
+      else
+        log "Unlisted but within grace window: $base (skipping for now)"
+      fi
+    fi
+  done
+  rm -f "$ALLOWLIST" 2>/dev/null || true
+}
+
 sync_once() {
   while read -r SUBDIR NAME; do
     # skip blanks and comments
@@ -167,11 +237,19 @@ fi
 
 # allow manual bootstrap
 if [[ "${1:-}" == "--oneshot" ]]; then
-  sync_once; exit 0
+  sync_once; 
+  sweep_temp;
+  prune_unlisted;
+  exit 0
 fi
 
 # background updater loop
-( while true; do sync_once; sleep "$UPDATE_SECS"; done ) &
+( while true; do
+    sync_once
+    sweep_temp
+    prune_unlisted
+    sleep "$UPDATE_SECS"
+  done ) &
 
 # optional: wait until at least one ZIM exists before serving
 if [[ "$WAIT_FOR_FIRST" = "1" ]]; then
