@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[bootstrap] HTTP-only updater active; no rsync calls will be made."
+echo "[bootstrap] HTTP-only updater active"
 
 DEST="${DEST:-/data/zim}"
 LIBRARY="${LIBRARY:-/data/library.xml}"
@@ -63,6 +63,9 @@ download_http() {
   local sha_remote="$HTTP_BASE/$sub/$name.sha256"
 
   mkdir -p "$(dirname "$part")"
+
+  # log target URLs
+    echo "[download] URL: $HTTP_BASE/$sub/$name"
 
   # resume if partial exists
   curl -fL --retry 5 --retry-delay 3 -C - -o "$part" "$HTTP_BASE/$sub/$name"
