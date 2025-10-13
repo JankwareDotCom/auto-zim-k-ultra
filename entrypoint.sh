@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "[bootstrap] HTTP-only updater active"
-
+ITEMS_PATH="${ITEMS_PATH:-/data/items.conf}"
 DEST="${DEST:-/data/zim}"
 LIBRARY="${LIBRARY:-/data/library.xml}"
 UPDATE_SECS=$(( ${UPDATE_INTERVAL_HOURS:-24} * 3600 ))
@@ -132,7 +132,7 @@ prune_old_versions() {
 build_allowlist() {
   ALLOWLIST="$(mktemp)"
   # Guard if config is missing
-  [ -f /items.conf ] || { : > "$ALLOWLIST"; return; }
+  [ -f "$ITEMS_PATH" ] || { : > "$ALLOWLIST"; return; }
 
   # Create list of allowed basenames from config
   while read -r SUBDIR NAME; do
@@ -147,7 +147,7 @@ build_allowlist() {
         basename "$f" >> "$ALLOWLIST"
       done
     fi
-  done < /items.conf
+  done < "$ITEMS_PATH"
 }
 
 prune_unlisted() {
@@ -232,14 +232,14 @@ sync_once() {
     fi
 
     sleep "$ITEM_DELAY"
-  done < /items.conf
+  done < "$ITEMS_PATH"
 }
 
 # write config from compose (if provided)
 if [ -n "${ITEMS:-}" ]; then
   # normalize CRLF just in case
-  printf '%s\n' "$ITEMS" | sed 's/\r$//' > /items.conf
-  echo "[config] Wrote $(wc -l < /items.conf) lines to /items.conf from \$ITEMS"
+  printf '%s\n' "$ITEMS" | sed 's/\r$//' > "$ITEMS_PATH"
+  echo "[config] Wrote $(wc -l < "$ITEMS_PATH") lines to '$ITEMS_PATH' from \$ITEMS"
 fi
 
 

@@ -24,10 +24,6 @@ RUN if command -v apk >/dev/null 2>&1; then \
     # Make sure CA bundle is registered if the base supports it (no-op otherwise)
     (command -v update-ca-certificates >/dev/null 2>&1 && update-ca-certificates || true)
 
-# config + entrypoint
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
 # Ensure /data exists, is owned by the runtime user, and is SGID + group-writable
 # SGID (2) on dirs ⇒ new files/dirs inherit the group (10001)
 RUN mkdir -p /data /data/zim && \
@@ -52,6 +48,7 @@ ENV DEST=/data/zim \
     UPDATE_INTERVAL_HOURS=24 \
     KEEP_OLD_VERSIONS=0 \
     ITEM_DELAY_SECONDS=5 \
+    ITEMS_PATH=/data/items.conf \
     PORT=8080 \
     HOME=/home/kiwix
 
