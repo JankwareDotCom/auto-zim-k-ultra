@@ -20,6 +20,8 @@ PRUNE_UNLISTED="${PRUNE_UNLISTED:-0}"
 UNLISTED_GRACE_HOURS="${UNLISTED_GRACE_HOURS:-24}"
 UNLISTED_DRY_RUN="${UNLISTED_DRY_RUN:-0}"
 
+# Define log function early
+log(){ echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
 
 # Ensure directories exist and are writable
 ensure_writable_dir() {
@@ -50,8 +52,6 @@ if ! touch "$LIBRARY" 2>/dev/null; then
   log "File permissions: $(ls -l "$LIBRARY" 2>/dev/null || echo "file does not exist")"
   exit 1
 fi
-
-log(){ echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
 
 http_list() {
   # prints *.zim filenames in a directory
