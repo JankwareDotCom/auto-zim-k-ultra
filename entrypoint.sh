@@ -21,10 +21,35 @@ UNLISTED_GRACE_HOURS="${UNLISTED_GRACE_HOURS:-24}"
 UNLISTED_DRY_RUN="${UNLISTED_DRY_RUN:-0}"
 
 
-mkdir -p "$TMP_DIR"
-mkdir -p "$DEST"
+# Ensure directories exist and are writable
+ensure_writable_dir() {
+  local dir="$1"
+  if ! mkdir -p "$dir" 2>/dev/null; then
+    log "ERROR: Cannot create directory: $dir"
+    log "This usually means /data is mounted read-only or has permission issues."
+    log "Please ensure /data is mounted with proper write permissions for user $(id -u):$(id -g)"
+    exit 1
+  fi
+  if ! [ -w "$dir" ]; then
+    log "ERROR: Directory not writable: $dir"
+    log "Current user: $(id -u):$(id -g)"
+    log "Directory permissions: $(ls -ld "$dir" 2>/dev/null || echo "cannot stat")"
+    exit 1
+  fi
+}
 
-touch "$LIBRARY" || true
+ensure_writable_dir "$TMP_DIR"
+ensure_writable_dir "$DEST"
+ensure_writable_dir "$(dirname "$LIBRARY")"
+
+# Ensure library.xml exists and is writable
+if ! touch "$LIBRARY" 2>/dev/null; then
+  log "ERROR: Cannot create/write library file: $LIBRARY"
+  log "Current user: $(id -u):$(id -g)"
+  log "Directory permissions: $(ls -ld "$(dirname "$LIBRARY")" 2>/dev/null || echo "cannot stat")"
+  log "File permissions: $(ls -l "$LIBRARY" 2>/dev/null || echo "file does not exist")"
+  exit 1
+fi
 
 log(){ echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
 
@@ -189,6 +214,20 @@ prune_unlisted() {
 }
 
 sync_once() {
+  # Check if config file exists and is readable
+  if [ ! -f "$ITEMS_PATH" ]; then
+    log "WARNING: Items config file not found: $ITEMS_PATH"
+    log "Create this file with content like: 'wikipedia wikipedia_en_top'"
+    return 0
+  fi
+  
+  if [ ! -r "$ITEMS_PATH" ]; then
+    log "ERROR: Cannot read items config file: $ITEMS_PATH"
+    log "Current user: $(id -u):$(id -g)"
+    log "File permissions: $(ls -l "$ITEMS_PATH" 2>/dev/null || echo "file does not exist")"
+    return 1
+  fi
+
   while read -r SUBDIR NAME; do
     # skip blanks and comments
     [[ -z "${SUBDIR// }" || "$SUBDIR" =~ ^# ]] && continue
@@ -218,8 +257,11 @@ sync_once() {
       log "Downloading $SUBDIR/$target"
       if download_http "$SUBDIR" "$target"; then
         # only after download_http() verifies and atomically moves .part -> final
-        kiwix-manage "$LIBRARY" add "$destfile" || true
-        log "Added to library: $target"
+        if kiwix-manage "$LIBRARY" add "$destfile" 2>/dev/null; then
+          log "Added to library: $target"
+        else
+          log "WARNING: Failed to add $target to library (continuing anyway)"
+        fi
       else
         # on failure/partial, we do nothing except keep the .part for resume
         log "Download/verify not complete yet for: $target (will resume next run)"
@@ -237,8 +279,16 @@ sync_once() {
 
 # write config from compose (if provided)
 if [ -n "${ITEMS:-}" ]; then
-  # normalize CRLF just in case
-  printf '%s\n' "$ITEMS" | sed 's/\r$//' > "$ITEMS_PATH"
+  # ensure items config directory is writable
+  ensure_writable_dir "$(dirname "$ITEMS_PATH")"
+  
+  # normalize CRLF just in case and write config
+  if ! printf '%s\n' "$ITEMS" | sed 's/\r$//' > "$ITEMS_PATH" 2>/dev/null; then
+    log "ERROR: Cannot write items config to: $ITEMS_PATH"
+    log "Current user: $(id -u):$(id -g)"
+    log "Directory permissions: $(ls -ld "$(dirname "$ITEMS_PATH")" 2>/dev/null || echo "cannot stat")"
+    exit 1
+  fi
   echo "[config] Wrote $(wc -l < "$ITEMS_PATH") lines to '$ITEMS_PATH' from \$ITEMS"
 fi
 

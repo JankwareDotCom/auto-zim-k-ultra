@@ -1,0 +1,19 @@
+# Example items.conf file for kiwix-with-updater
+# Format: SUBDIR NAME
+# 
+# SUBDIR: subdirectory on download.kiwix.org/zim/ 
+# NAME: either exact filename.zim or prefix for latest matching
+#
+# Examples:
+# wikipedia wikipedia_en_top        # Gets latest wikipedia_en_top_YYYY-MM.zim
+# wikipedia wikipedia_de_top        # Gets latest wikipedia_de_top_YYYY-MM.zim
+# wiktionary wiktionary_en_simple   # Gets latest wiktionary_en_simple_YYYY-MM.zim
+# gutenberg gutenberg_en_all        # Gets latest gutenberg_en_all_YYYY-MM.zim
+# stack_exchange stack.exchange.askubuntu.com_en_all  # Gets latest askubuntu ZIM
+#
+# For exact files (not recommended for auto-updates):
+# wikipedia wikipedia_en_top_2024-01.zim
+
+# Uncomment the lines below for your desired content:
+# wikipedia wikipedia_en_top
+# wikipedia wikipedia_de_top
