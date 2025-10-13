@@ -51,6 +51,8 @@ COPY --chown=10001:10001 --chmod=0555 entrypoint.sh /entrypoint.sh
 
 # Drop root
 USER 10001:10001
+# Set a safer umask (so files created in volumes are group-readable/writable)
+ENV APP_UMASK=027
 
 # Keep the working directory non-root owned
 WORKDIR /home/kiwix
