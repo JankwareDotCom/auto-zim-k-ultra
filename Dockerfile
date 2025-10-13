@@ -43,6 +43,7 @@ VOLUME ["/data"]
 
 # Create /data now so we can set ownership without relying on runtime flags
 RUN mkdir -p /data && chown -R 10001:10001 /data
+RUN chmod 0750 /data || true
 
 # Copy entrypoint with tight permissions and correct ownership
 # (Use --chmod/--chown so we don’t need an extra layer to chmod/chown)
