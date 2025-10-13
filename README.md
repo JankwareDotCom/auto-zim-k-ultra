@@ -13,9 +13,39 @@ A Docker container that automatically downloads and serves ZIM files using Kiwix
 
 ## Quick Start
 
-### Using Docker Compose
+### Method 1: Build with Your User ID (Recommended)
 
-Create a `docker-compose.yml` file:
+Build the image with your current user ID to avoid permission issues:
+
+```bash
+# Linux/macOS - automatically detect your user ID
+docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t kiwix-updater .
+
+# Windows - use a consistent user ID
+docker build --build-arg USER_ID=1000 --build-arg GROUP_ID=1000 -t kiwix-updater .
+```
+
+Then create your `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+services:
+  kiwix:
+    image: kiwix-updater  # Use your locally built image
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/home/app/data
+    environment:
+      - UPDATE_INTERVAL_HOURS=24
+      - KEEP_OLD_VERSIONS=1
+      - WAIT_FOR_FIRST=1
+    restart: unless-stopped
+```
+
+### Method 2: Using Pre-built Image
+
+If using the pre-built image, you'll need to match the container's user ID (10001):
 
 ```yaml
 version: '3.8'
@@ -27,12 +57,20 @@ services:
       - "8080:8080"
     volumes:
       - ./data:/home/app/data
-      - ./items.conf:/home/app/data/items.conf
     environment:
       - UPDATE_INTERVAL_HOURS=24
       - KEEP_OLD_VERSIONS=1
       - WAIT_FOR_FIRST=1
     restart: unless-stopped
+```
+
+And fix permissions:
+```bash
+# Linux/macOS
+sudo chown -R 10001:10001 ./data
+
+# Windows (in WSL or Git Bash)
+chown -R 10001:10001 ./data
 ```
 
 Create an `items.conf` file to specify what content to download(or pass in via an evironment variable)
@@ -90,19 +128,24 @@ The container uses a conventional home directory structure:
 
 ### Permissions
 
-The container runs as user `10001:10001` (`kiwix:kiwix`). For proper operation:
+The container can be built with custom user IDs to match your host user, eliminating permission issues:
 
-- **Recommended**: Ensure your host data directory is owned by UID:GID `10001:10001`
-- **Alternative**: Run with `--user 10001:10001` flag
-- **Less secure**: Run as root with `--user 0:0`
-
+#### Option 1: Build with Your User ID (Cleanest)
 ```bash
-# Fix host directory permissions (recommended)
-sudo chown -R 10001:10001 ./data
-
-# Or run with user flag
-docker run --user 10001:10001 ...
+# Build with your current user ID - no permission issues!
+docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t kiwix-updater .
 ```
+
+#### Option 2: Use Pre-built Image
+The pre-built image uses user `10001:10001`. You'll need to:
+```bash
+# Fix host directory permissions
+sudo chown -R 10001:10001 ./data
+```
+
+#### Build Arguments
+- `USER_ID`: User ID to run as (default: 10001)
+- `GROUP_ID`: Group ID to run as (default: 10001)
 
 ### Environment Variables
 
