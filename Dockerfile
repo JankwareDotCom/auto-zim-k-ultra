@@ -52,7 +52,9 @@ COPY --chmod=0755 entrypoint.sh /entrypoint.sh
 
 EXPOSE 8080/tcp
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=5 --start-period=60s \
-  CMD sh -c 'curl -fsS "http://localhost:${PORT:-8080}/" >/dev/null || exit 1'
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
+  CMD sh -c 'curl -fsS "http://localhost:${PORT:-8080}/" >/dev/null && \
+             [ -f /home/app/data/library.xml ] && \
+             [ "$(find /home/app/data/zim -name "*.zim" | wc -l)" -gt 0 ] || exit 1'
   
 ENTRYPOINT ["/init.sh", "/entrypoint.sh"]
