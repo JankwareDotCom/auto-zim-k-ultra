@@ -1,0 +1,10 @@
+version: 2
+updates:
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["deps"]
+    groups:
+      kiwix-base:
+        patterns: ["ghcr.io/kiwix/kiwix-tools"]
