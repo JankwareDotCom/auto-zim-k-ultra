@@ -30,7 +30,6 @@ RUNTIME_GID=$(id -g)\n\
 \n\
 if [ "$RUNTIME_UID" = "0" ]; then\n\
     echo "[init] Running as root - will create user and drop privileges"\n\
-    # Create a user matching a common ID or use 1000 as fallback\n\
     TARGET_UID=${PUID:-1000}\n\
     TARGET_GID=${PGID:-1000}\n\
     \n\
@@ -45,7 +44,7 @@ if [ "$RUNTIME_UID" = "0" ]; then\n\
     # Fix ownership\n\
     chown -R $TARGET_UID:$TARGET_GID /home/app 2>/dev/null || true\n\
     echo "[init] Dropping to user $TARGET_UID:$TARGET_GID"\n\
-    exec su -s /bin/sh -c "exec \\"$@\\"" "#$TARGET_UID" -- "$@"\n\
+    exec su -s /bin/sh app -c "exec \\"$@\\"" -- "$@"\n\
 else\n\
     echo "[init] Running as user $RUNTIME_UID:$RUNTIME_GID"\n\
     # Fix ownership to match current user\n\
