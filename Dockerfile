@@ -28,6 +28,23 @@ RUN if command -v apk >/dev/null 2>&1; then \
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Ensure /data exists, is owned by the runtime user, and is SGID + group-writable
+# SGID (2) on dirs ⇒ new files/dirs inherit the group (10001)
+RUN mkdir -p /data /data/zim && \
+    chown -R 10001:10001 /data && \
+    chmod -R 2770 /data
+
+ENV APP_UMASK=027
+
+# Drop root
+USER 10001:10001
+
+# Keep the working directory non-root owned
+WORKDIR /home/kiwix
+
+# Prepare writable mount and own it
+VOLUME ["/data"]
+
 # App config
 ENV DEST=/data/zim \
     LIBRARY=/data/library.xml \
@@ -38,24 +55,9 @@ ENV DEST=/data/zim \
     PORT=8080 \
     HOME=/home/kiwix
 
-# Prepare writable mount and own it
-VOLUME ["/data"]
-
-# Create /data now so we can set ownership without relying on runtime flags
-RUN mkdir -p /data && chown -R 10001:10001 /data
-RUN chmod 0750 /data || true
-
 # Copy entrypoint with tight permissions and correct ownership
 # (Use --chmod/--chown so we don’t need an extra layer to chmod/chown)
 COPY --chown=10001:10001 --chmod=0555 entrypoint.sh /entrypoint.sh
-
-# Drop root
-USER 10001:10001
-# Set a safer umask (so files created in volumes are group-readable/writable)
-ENV APP_UMASK=027
-
-# Keep the working directory non-root owned
-WORKDIR /home/kiwix
 
 EXPOSE 8080/tcp
 
