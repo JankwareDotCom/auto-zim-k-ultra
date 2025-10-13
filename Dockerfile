@@ -22,50 +22,8 @@ RUN if command -v apk >/dev/null 2>&1; then \
 RUN mkdir -p /home/app/data /home/app/data/zim && \
     chmod -R 777 /home/app
 
-# Create a smart init script that adapts to the runtime user
-RUN printf '#!/bin/sh\n\
-# Smart initialization that works with any user ID\n\
-RUNTIME_UID=$(id -u)\n\
-RUNTIME_GID=$(id -g)\n\
-\n\
-if [ "$RUNTIME_UID" = "0" ]; then\n\
-    echo "[init] Running as root - will create user and drop privileges"\n\
-    TARGET_UID=${PUID:-1000}\n\
-    TARGET_GID=${PGID:-1000}\n\
-    \n\
-    # Create group and user if they do not exist\n\
-    if ! getent group $TARGET_GID >/dev/null 2>&1; then\n\
-        groupadd -g $TARGET_GID app 2>/dev/null || true\n\
-    fi\n\
-    if ! getent passwd $TARGET_UID >/dev/null 2>&1; then\n\
-        useradd -u $TARGET_UID -g $TARGET_GID -d /home/app -s /bin/sh app 2>/dev/null || true\n\
-    fi\n\
-    \n\
-    # Fix ownership\n\
-    chown -R $TARGET_UID:$TARGET_GID /home/app 2>/dev/null || true\n\
-    echo "[init] Dropping to user $TARGET_UID:$TARGET_GID"\n\
-    exec su -s /bin/sh app -c "exec \\"$@\\"" -- "$@"\n\
-else\n\
-    echo "[init] Running as user $RUNTIME_UID:$RUNTIME_GID"\n\
-    # Fix ownership to match current user\n\
-    if [ -w /home/app ]; then\n\
-        chown -R $RUNTIME_UID:$RUNTIME_GID /home/app 2>/dev/null || true\n\
-    fi\n\
-    # Ensure data directory exists and is writable\n\
-    mkdir -p /home/app/data/zim/.tmp 2>/dev/null || true\n\
-    if [ ! -w /home/app/data ]; then\n\
-        echo "[init] ERROR: /home/app/data not writable by user $RUNTIME_UID:$RUNTIME_GID"\n\
-        echo "[init] "\n\
-        echo "[init] SOLUTIONS:"\n\
-        echo "[init] 1. Run with: docker run --user \$(id -u):\$(id -g) ..."\n\
-        echo "[init] 2. Or fix host permissions: chown -R \$(id -u):\$(id -g) ./data"\n\
-        echo "[init] 3. Or set PUID/PGID: -e PUID=\$(id -u) -e PGID=\$(id -g)"\n\
-        echo "[init] "\n\
-        exit 1\n\
-    fi\n\
-fi\n\
-exec "$@"\n' > /init.sh && \
-    chmod +x /init.sh
+# Copy the init script with proper permissions
+COPY --chmod=0755 init.sh /init.sh
 
 ENV APP_UMASK=027
 
