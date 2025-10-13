@@ -2,9 +2,9 @@
 set -euo pipefail
 
 echo "[bootstrap] HTTP-only updater active"
-ITEMS_PATH="${ITEMS_PATH:-/data/items.conf}"
-DEST="${DEST:-/data/zim}"
-LIBRARY="${LIBRARY:-/data/library.xml}"
+ITEMS_PATH="${ITEMS_PATH:-/home/app/data/items.conf}"
+DEST="${DEST:-/home/app/data/zim}"
+LIBRARY="${LIBRARY:-/home/app/data/library.xml}"
 UPDATE_SECS=$(( ${UPDATE_INTERVAL_HOURS:-24} * 3600 ))
 KEEP=${KEEP_OLD_VERSIONS:-0}
 PORT="${PORT:-8080}"
@@ -30,11 +30,12 @@ ensure_writable_dir() {
   # First try to create the directory
   if ! mkdir -p "$dir" 2>/dev/null; then
     log "ERROR: Cannot create directory: $dir"
-    log "This usually means /data is mounted read-only or has permission issues."
+    log "This usually means the data directory is mounted read-only or has permission issues."
     log "Current user: $(id -u):$(id -g)"
-    log "Please ensure /data is mounted with proper write permissions for user $(id -u):$(id -g)"
-    log "Fix with: chown -R $(id -u):$(id -g) /path/to/host/data/directory"
-    log "Or run container with: --user $(id -u):$(id -g)"
+    log "Try using PUID/PGID environment variables to match your host user:"
+    log "  environment:"
+    log "    - PUID=$(id -u)"
+    log "    - PGID=$(id -g)"
     exit 1
   fi
   
@@ -43,8 +44,10 @@ ensure_writable_dir() {
     log "ERROR: Directory not writable: $dir"
     log "Current user: $(id -u):$(id -g)"
     log "Directory permissions: $(ls -ld "$dir" 2>/dev/null || echo "cannot stat")"
-    log "Please fix permissions with: chown -R $(id -u):$(id -g) /path/to/host/data/directory"
-    log "Or run container with: --user $(id -u):$(id -g)"
+    log "Try using PUID/PGID environment variables to match your host user:"
+    log "  environment:"
+    log "    - PUID=$(id -u)"
+    log "    - PGID=$(id -g)"
     exit 1
   fi
 }

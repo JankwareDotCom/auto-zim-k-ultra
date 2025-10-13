@@ -13,7 +13,7 @@ A Docker container that automatically downloads and serves ZIM files using Kiwix
 
 ## Quick Start
 
-### Super Simple Setup (Just Works™️)
+### Zero-Config Setup (Just Works™️)
 
 Create your `docker-compose.yml`:
 
@@ -22,12 +22,13 @@ version: '3.8'
 services:
   kiwix:
     image: ghcr.io/egiraffe/kiwix-with-updater:latest
-    user: "$(id -u):$(id -g)"  # Use your current user ID
     ports:
       - "8080:8080"
     volumes:
       - ./data:/home/app/data
     environment:
+      - PUID=1000  # Automatically matches most Linux users
+      - PGID=1000  # Automatically matches most Linux users
       - UPDATE_INTERVAL_HOURS=24
       - KEEP_OLD_VERSIONS=1
       - WAIT_FOR_FIRST=1
@@ -35,31 +36,30 @@ services:
 ```
 
 **That's it!** The container automatically:
-- ✅ Adapts to your user ID
-- ✅ Fixes permissions automatically
+- ✅ Creates a user matching PUID/PGID (defaults to 1000:1000)
+- ✅ Fixes all permissions automatically
 - ✅ No building required
-- ✅ Secure (runs as your user, not root)
+- ✅ Secure (runs as non-root user)
+- ✅ Works on Linux, macOS, and Windows
 
-### Alternative: PUID/PGID Environment Variables
+### If You Get Permission Errors
 
-If the above doesn't work, you can also use:
+The default PUID=1000 and PGID=1000 work for most users. If you get permission errors, find your user ID:
+
+```bash
+# Find your user ID (Linux/macOS)
+id -u  # Your user ID
+id -g  # Your group ID
+```
+
+Then update your docker-compose.yml:
 
 ```yaml
-version: '3.8'
 services:
   kiwix:
-    image: ghcr.io/egiraffe/kiwix-with-updater:latest
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./data:/home/app/data
     environment:
-      - PUID=1000  # Your user ID
-      - PGID=1000  # Your group ID
-      - UPDATE_INTERVAL_HOURS=24
-      - KEEP_OLD_VERSIONS=1
-      - WAIT_FOR_FIRST=1
-    restart: unless-stopped
+      - PUID=1001  # Use your actual user ID here
+      - PGID=1001  # Use your actual group ID here
 ```
 
 Create an `items.conf` file to specify what content to download(or pass in via an evironment variable)
@@ -93,10 +93,11 @@ EOF
 # Run container
 docker run -d \
   --name kiwix-with-updater \
-  --user 10001:10001 \
   -p 8080:8080 \
   -v "$(pwd)/data:/home/app/data" \
   -v "$(pwd)/items.conf:/home/app/data/items.conf" \
+  -e PUID=1000 \
+  -e PGID=1000 \
   -e UPDATE_INTERVAL_HOURS=24 \
   -e KEEP_OLD_VERSIONS=1 \
   -e WAIT_FOR_FIRST=1 \
@@ -117,37 +118,35 @@ The container uses a conventional home directory structure:
 
 ### Permissions
 
-**TL;DR: Just use `user: "$(id -u):$(id -g)"` and it works! 🎉**
+**TL;DR: Just use PUID=1000 and PGID=1000, it works for most people! 🎉**
 
-The container automatically adapts to your user:
-
-#### Method 1: User Flag (Recommended)
-```yaml
-services:
-  kiwix:
-    image: ghcr.io/egiraffe/kiwix-with-updater:latest
-    user: "$(id -u):$(id -g)"  # Automatically uses your user ID
-```
-
-#### Method 2: PUID/PGID Environment Variables
-```yaml
-services:
-  kiwix:
-    image: ghcr.io/egiraffe/kiwix-with-updater:latest
-    environment:
-      - PUID=1000  # Your user ID
-      - PGID=1000  # Your group ID
-```
+The container automatically handles permissions:
 
 #### How It Works
-- Container detects the runtime user ID
-- Automatically creates matching user inside container
-- Fixes file permissions on startup
-- No building, no manual chown commands needed!
+- Container starts as root and creates a user with your PUID/PGID
+- Fixes all file permissions automatically
+- Drops to the created user for security
+- No manual permission fixing needed!
+
+#### Default Values (Work for Most People)
+```yaml
+environment:
+  - PUID=1000  # Most Linux users
+  - PGID=1000  # Most Linux users
+```
+
+#### If You Need Different Values
+```bash
+# Find your actual user ID (Linux/macOS)
+id -u  # Your user ID 
+id -g  # Your group ID
+
+# Windows users can usually stick with 1000:1000
+```
 
 #### Environment Variables for User Management
-- `PUID`: User ID to run as (when running as root)
-- `PGID`: Group ID to run as (when running as root)
+- `PUID`: User ID to create inside container (default: 1000)
+- `PGID`: Group ID to create inside container (default: 1000)
 
 ### Environment Variables
 
