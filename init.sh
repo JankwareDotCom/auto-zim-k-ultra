@@ -19,7 +19,7 @@ if [ "$RUNTIME_UID" = "0" ]; then
     # Fix ownership
     chown -R $TARGET_UID:$TARGET_GID /home/app 2>/dev/null || true
     echo "[init] Dropping to user $TARGET_UID:$TARGET_GID"
-    exec su -s /bin/sh app -c "exec \"$@\"" -- "$@"
+    exec su -s /bin/sh app -c "umask \${APP_UMASK:-027}; exec \"\$@\"" -- "$@"
 else
     echo "[init] Running as user $RUNTIME_UID:$RUNTIME_GID"
     # Fix ownership to match current user
@@ -39,4 +39,7 @@ else
         exit 1
     fi
 fi
+
+# Set umask for file creation security
+umask ${APP_UMASK:-027}
 exec "$@"
