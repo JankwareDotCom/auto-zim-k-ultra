@@ -25,8 +25,8 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/home/kiwix/data
-      - ./items.conf:/home/kiwix/data/items.conf
+      - ./data:/home/app/data
+      - ./items.conf:/home/app/data/items.conf
     environment:
       - UPDATE_INTERVAL_HOURS=24
       - KEEP_OLD_VERSIONS=1
@@ -66,8 +66,8 @@ EOF
 docker run -d \
   --name kiwix-with-updater \
   -p 8080:8080 \
-  -v "$(pwd)/data:/home/kiwix/data" \
-  -v "$(pwd)/items.conf:/home/kiwix/data/items.conf" \
+  -v "$(pwd)/data:/home/app/data" \
+  -v "$(pwd)/items.conf:/home/app/data/items.conf" \
   -e UPDATE_INTERVAL_HOURS=24 \
   -e KEEP_OLD_VERSIONS=1 \
   -e WAIT_FOR_FIRST=1 \
@@ -80,11 +80,11 @@ docker run -d \
 
 The container uses a conventional home directory structure:
 
-- `/home/kiwix/` - User home directory (owned by user 10001:10001)
-- `/home/kiwix/data/` - Application data directory (mounted volume)
-- `/home/kiwix/data/zim/` - ZIM files storage
-- `/home/kiwix/data/library.xml` - Kiwix library file
-- `/home/kiwix/data/items.conf` - Items configuration file
+- `/home/app/` - User home directory (owned by user 10001:10001)
+- `/home/app/data/` - Application data directory (mounted volume)
+- `/home/app/data/zim/` - ZIM files storage
+- `/home/app/data/library.xml` - Kiwix library file
+- `/home/app/data/items.conf` - Items configuration file
 
 ### Permissions
 
@@ -106,9 +106,9 @@ docker run --user 10001:10001 ...
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DEST` | `/home/kiwix/data/zim` | Directory to store ZIM files |
-| `LIBRARY` | `/home/kiwix/data/library.xml` | Path to Kiwix library file |
-| `ITEMS_PATH` | `/home/kiwix/data/items.conf` | Path to items configuration file |
+| `DEST` | `/home/app/data/zim` | Directory to store ZIM files |
+| `LIBRARY` | `/home/app/data/library.xml` | Path to Kiwix library file |
+| `ITEMS_PATH` | `/home/app/data/items.conf` | Path to items configuration file |
 | `UPDATE_INTERVAL_HOURS` | `24` | How often to check for updates (hours) |
 | `KEEP_OLD_VERSIONS` | `0` | Number of old versions to keep per prefix |
 | `PORT` | `8080` | Port for Kiwix server |
@@ -184,18 +184,18 @@ COPY items.conf /items.conf
 RUN chmod +x /entrypoint.sh
 
 # Set default environment variables
-ENV DEST=/home/kiwix/data/zim \
-    LIBRARY=/home/kiwix/data/library.xml \
-    ITEMS_PATH=/home/kiwix/data/items.conf \
+ENV DEST=/home/app/data/zim \
+    LIBRARY=/home/app/data/library.xml \
+    ITEMS_PATH=/home/app/data/items.conf \
     HTTP_BASE=https://download.kiwix.org/zim \
     UPDATE_INTERVAL_HOURS=24 \
     KEEP_OLD_VERSIONS=0 \
     ITEM_DELAY_SECONDS=5 \
     PORT=8080 \
-    HOME=/home/kiwix
+    HOME=/home/app
 
 # Expose volume and port
-VOLUME ["/home/kiwix/data"]
+VOLUME ["/home/app/data"]
 EXPOSE 8080
 
 # Set entrypoint
@@ -210,8 +210,8 @@ Run a one-time sync without starting the server:
 
 ```bash
 docker run --rm \
-  -v "$(pwd)/data:/home/kiwix/data" \
-  -v "$(pwd)/items.conf:/home/kiwix/data/items.conf" \
+  -v "$(pwd)/data:/home/app/data" \
+  -v "$(pwd)/items.conf:/home/app/data/items.conf" \
   kiwix-with-updater --oneshot
 ```
 
@@ -221,7 +221,7 @@ docker run --rm \
 docker run -d \
   --name kiwix-custom \
   -p 8080:8080 \
-  -v "$(pwd)/data:/home/kiwix/data" \
+  -v "$(pwd)/data:/home/app/data" \
   -e ITEMS="wikipedia wikipedia_en_top
 wiktionary wiktionary_en_all
 gutenberg gutenberg_en_all" \
@@ -237,9 +237,9 @@ gutenberg gutenberg_en_all" \
 # Mount the source code for development
 docker run -it --rm \
   -p 8080:8080 \
-  -v "$(pwd)/data:/home/kiwix/data" \
+  -v "$(pwd)/data:/home/app/data" \
   -v "$(pwd)/entrypoint.sh:/entrypoint.sh" \
-  -v "$(pwd)/items.conf:/home/kiwix/data/items.conf" \
+  -v "$(pwd)/items.conf:/home/app/data/items.conf" \
   kiwix-with-updater
 ```
 
@@ -259,10 +259,10 @@ docker logs --tail 100 kiwix-with-updater
 
 ```bash
 # List downloaded ZIM files
-docker exec kiwix-with-updater ls -la /home/kiwix/data/zim/
+docker exec kiwix-with-updater ls -la /home/app/data/zim/
 
 # Check library status
-docker exec kiwix-with-updater kiwix-manage /home/kiwix/data/library.xml show
+docker exec kiwix-with-updater kiwix-manage /home/app/data/library.xml show
 ```
 
 ## Troubleshooting

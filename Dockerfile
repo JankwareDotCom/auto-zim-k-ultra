@@ -6,15 +6,15 @@ SHELL ["/bin/sh", "-eux", "-c"]
 
 # Minimal runtime deps + non-root user creation for both Alpine and Debian/Ubuntu
 # - Installs: bash (for your script if it uses bashisms), curl (healthcheck), ca-certs
-# - Creates dedicated kiwix user/group with a stable UID/GID that won't collide with system users
+# - Creates dedicated user/group with a stable UID/GID that won't collide with system users
 # - Cleans up package lists
 RUN if command -v apk >/dev/null 2>&1; then \
-      addgroup -g 10001 -S kiwix && adduser -S -D -u 10001 -G kiwix -h /home/kiwix kiwix; \
+      addgroup -g 10001 -S app && adduser -S -D -u 10001 -G app -h /home/app app; \
       apk add --no-cache bash coreutils curl ca-certificates; \
     elif command -v apt-get >/dev/null 2>&1; then \
       export DEBIAN_FRONTEND=noninteractive; \
-      groupadd --gid 10001 kiwix || true; \
-      useradd --uid 10001 --gid 10001 --create-home --home-dir /home/kiwix --shell /usr/sbin/nologin kiwix; \
+      groupadd --gid 10001 app || true; \
+      useradd --uid 10001 --gid 10001 --create-home --home-dir /home/app --shell /usr/sbin/nologin app; \
       apt-get update; \
       apt-get install -y --no-install-recommends bash curl ca-certificates; \
       rm -rf /var/lib/apt/lists/*; \
@@ -26,34 +26,16 @@ RUN if command -v apk >/dev/null 2>&1; then \
 
 # Ensure home directory exists, is owned by the runtime user, and is SGID + group-writable
 # SGID (2) on dirs ⇒ new files/dirs inherit the group (10001)
-RUN mkdir -p /home/kiwix/data /home/kiwix/data/zim && \
-    chown -R 10001:10001 /home/kiwix && \
-    chmod -R 2770 /home/kiwix
+RUN mkdir -p /home/app/data /home/app/data/zim && \
+    chown -R 10001:10001 /home/app && \
+    chmod -R 2770 /home/app
 
-# Create a permission-fixing init script for hardened environments
+# Create a minimal init script for root handling and clear error messages
 RUN printf '#!/bin/sh\n\
-# Fix permissions when running in hardened environments\n\
 if [ "$(id -u)" = "0" ]; then\n\
-    echo "[init] Running as root, fixing home directory permissions..."\n\
-    chown -R 10001:10001 /home/kiwix 2>/dev/null || true\n\
-    chmod -R 2770 /home/kiwix 2>/dev/null || true\n\
-    echo "[init] Dropping to user 10001:10001..."\n\
-    exec su -s /bin/sh -c "exec \\"$@\\"" kiwix -- "$@"\n\
-elif [ ! -w /home/kiwix/data ]; then\n\
-    echo "[init] WARNING: /home/kiwix/data not writable by current user $(id -u):$(id -g)"\n\
-    echo "[init] You may need to fix mount permissions or run with --user 10001:10001"\n\
-    echo "[init] Attempting to create required directories..."\n\
-    # Try to create directories with proper permissions\n\
-    mkdir -p /home/kiwix/data/zim/.tmp 2>/dev/null || true\n\
-    mkdir -p /home/kiwix/data 2>/dev/null || true\n\
-    # If still not writable after creation attempts, show more detailed error\n\
-    if [ ! -w /home/kiwix/data ]; then\n\
-        echo "[init] ERROR: /home/kiwix/data is still not writable after setup attempts"\n\
-        echo "[init] Please ensure the host directory is owned by UID:GID 10001:10001"\n\
-        echo "[init] Or run: docker run --user 10001:10001 ..."\n\
-        echo "[init] Or run: chown -R 10001:10001 /path/to/host/data/directory"\n\
-        exit 1\n\
-    fi\n\
+    echo "[init] Running as root, fixing permissions and dropping to user app..."\n\
+    chown -R 10001:10001 /home/app 2>/dev/null || true\n\
+    exec su -s /bin/sh -c "exec \\"$@\\"" app -- "$@"\n\
 fi\n\
 exec "$@"\n' > /init.sh && \
     chmod +x /init.sh
@@ -64,21 +46,21 @@ ENV APP_UMASK=027
 USER 10001:10001
 
 # Set home directory as working directory
-WORKDIR /home/kiwix
+WORKDIR /home/app
 
 # Prepare writable mount and own it
-VOLUME ["/home/kiwix/data"]
+VOLUME ["/home/app/data"]
 
 # App config
-ENV DEST=/home/kiwix/data/zim \
-    LIBRARY=/home/kiwix/data/library.xml \
+ENV DEST=/home/app/data/zim \
+    LIBRARY=/home/app/data/library.xml \
     HTTP_BASE=https://download.kiwix.org/zim \
     UPDATE_INTERVAL_HOURS=24 \
     KEEP_OLD_VERSIONS=0 \
     ITEM_DELAY_SECONDS=5 \
-    ITEMS_PATH=/home/kiwix/data/items.conf \
+    ITEMS_PATH=/home/app/data/items.conf \
     PORT=8080 \
-    HOME=/home/kiwix
+    HOME=/home/app
 
 # Copy entrypoint with tight permissions and correct ownership
 # (Use --chmod/--chown so we don’t need an extra layer to chmod/chown)
