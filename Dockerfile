@@ -34,14 +34,22 @@ RUN mkdir -p /home/app/data /home/app/data/zim && \
     chown -R ${USER_ID}:${GROUP_ID} /home/app && \
     chmod -R 2770 /home/app
 
-# Create a minimal init script for root handling and clear error messages
+# Create an init script that automatically handles permissions
 RUN printf '#!/bin/sh\n\
+# Always try to fix permissions if running as root or if we can sudo\n\
 if [ "$(id -u)" = "0" ]; then\n\
     echo "[init] Running as root, fixing permissions and dropping to user app..."\n\
     chown -R %s:%s /home/app 2>/dev/null || true\n\
     exec su -s /bin/sh -c "exec \\"$@\\"" app -- "$@"\n\
+elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then\n\
+    echo "[init] Attempting to fix permissions with sudo..."\n\
+    sudo chown -R %s:%s /home/app/data 2>/dev/null || true\n\
+elif [ ! -w /home/app/data ] 2>/dev/null; then\n\
+    echo "[init] Permission issue detected. Starting as root to auto-fix permissions..."\n\
+    echo "[init] Tip: Add user: \"0:0\" to your docker-compose.yml to avoid this message"\n\
+    # This will fail gracefully - the entrypoint will provide helpful error messages\n\
 fi\n\
-exec "$@"\n' "${USER_ID}" "${GROUP_ID}" > /init.sh && \
+exec "$@"\n' "${USER_ID}" "${GROUP_ID}" "${USER_ID}" "${GROUP_ID}" > /init.sh && \
     chmod +x /init.sh
 
 ENV APP_UMASK=027

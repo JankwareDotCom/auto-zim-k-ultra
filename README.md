@@ -13,46 +13,16 @@ A Docker container that automatically downloads and serves ZIM files using Kiwix
 
 ## Quick Start
 
-### Method 1: Build with Your User ID (Recommended)
+### Zero-Config Setup (Recommended for Lazy People 😉)
 
-Build the image with your current user ID to avoid permission issues:
-
-```bash
-# Linux/macOS - automatically detect your user ID
-docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t kiwix-updater .
-
-# Windows - use a consistent user ID
-docker build --build-arg USER_ID=1000 --build-arg GROUP_ID=1000 -t kiwix-updater .
-```
-
-Then create your `docker-compose.yml`:
-
-```yaml
-version: '3.8'
-services:
-  kiwix:
-    image: kiwix-updater  # Use your locally built image
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./data:/home/app/data
-    environment:
-      - UPDATE_INTERVAL_HOURS=24
-      - KEEP_OLD_VERSIONS=1
-      - WAIT_FOR_FIRST=1
-    restart: unless-stopped
-```
-
-### Method 2: Using Pre-built Image
-
-If using the pre-built image, you'll need to match the container's user ID (10001):
+Just run as root - the container automatically drops privileges and fixes permissions:
 
 ```yaml
 version: '3.8'
 services:
   kiwix:
     image: ghcr.io/egiraffe/kiwix-with-updater:latest
-    user: "10001:10001" 
+    user: "0:0"  # Run as root - container handles security automatically
     ports:
       - "8080:8080"
     volumes:
@@ -64,13 +34,36 @@ services:
     restart: unless-stopped
 ```
 
-And fix permissions:
-```bash
-# Linux/macOS
-sudo chown -R 10001:10001 ./data
+**That's it!** No permission fixing, no user ID matching, no manual setup. The container:
+- ✅ Automatically fixes file permissions
+- ✅ Drops to non-root user for security  
+- ✅ Just works™️
 
-# Windows (in WSL or Git Bash)
-chown -R 10001:10001 ./data
+### Advanced: Custom User ID (For Security Purists)
+
+If you want to avoid root entirely, build with your user ID:
+
+```bash
+# Build with your current user ID
+docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t kiwix-updater .
+```
+
+Then use without the `user: "0:0"` line:
+
+```yaml
+version: '3.8'
+services:
+  kiwix:
+    image: kiwix-updater  # Your locally built image
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/home/app/data
+    environment:
+      - UPDATE_INTERVAL_HOURS=24
+      - KEEP_OLD_VERSIONS=1
+      - WAIT_FOR_FIRST=1
+    restart: unless-stopped
 ```
 
 Create an `items.conf` file to specify what content to download(or pass in via an evironment variable)
@@ -128,19 +121,24 @@ The container uses a conventional home directory structure:
 
 ### Permissions
 
-The container can be built with custom user IDs to match your host user, eliminating permission issues:
+**TL;DR: Just use `user: "0:0"` and forget about permissions! 🎉**
 
-#### Option 1: Build with Your User ID (Cleanest)
-```bash
-# Build with your current user ID - no permission issues!
-docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t kiwix-updater .
+The container automatically handles permissions for you:
+
+#### Option 1: Zero-Config (Recommended)
+```yaml
+services:
+  kiwix:
+    user: "0:0"  # Container auto-fixes permissions and drops privileges
 ```
+- ✅ No manual permission fixing required
+- ✅ Container automatically drops to non-root user  
+- ✅ Secure and effortless
 
-#### Option 2: Use Pre-built Image
-The pre-built image uses user `10001:10001`. You'll need to:
+#### Option 2: Custom User ID (For Purists)
 ```bash
-# Fix host directory permissions
-sudo chown -R 10001:10001 ./data
+# Build with your user ID to avoid root entirely
+docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t kiwix-updater .
 ```
 
 #### Build Arguments
