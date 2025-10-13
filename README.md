@@ -22,6 +22,7 @@ version: '3.8'
 services:
   kiwix:
     image: ghcr.io/egiraffe/kiwix-with-updater:latest
+    user: "10001:10001" 
     ports:
       - "8080:8080"
     volumes:
@@ -65,6 +66,7 @@ EOF
 # Run container
 docker run -d \
   --name kiwix-with-updater \
+  --user 10001:10001 \
   -p 8080:8080 \
   -v "$(pwd)/data:/home/app/data" \
   -v "$(pwd)/items.conf:/home/app/data/items.conf" \
