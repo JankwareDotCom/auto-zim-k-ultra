@@ -38,7 +38,7 @@ if [ "$(id -u)" = "0" ]; then\n\
     chown -R 10001:10001 /data 2>/dev/null || true\n\
     chmod -R 2770 /data 2>/dev/null || true\n\
     echo "[init] Dropping to user 10001:10001..."\n\
-    exec gosu 10001:10001 "$@"\n\
+    exec su -s /bin/sh -c "exec \\"$@\\"" kiwix -- "$@"\n\
 elif [ ! -w /data ]; then\n\
     echo "[init] WARNING: /data not writable by current user $(id -u):$(id -g)"\n\
     echo "[init] You may need to fix mount permissions or run with --user 10001:10001"\n\
@@ -46,12 +46,7 @@ fi\n\
 exec "$@"\n' > /init.sh && \
     chmod +x /init.sh
 
-# Install gosu for safe user switching (only if we have package manager access)   
-RUN if command -v apk >/dev/null 2>&1; then \
-      apk add --no-cache gosu; \
-    elif command -v apt-get >/dev/null 2>&1; then \
-      apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*; \
-    fi
+
 
 ENV APP_UMASK=027
 
