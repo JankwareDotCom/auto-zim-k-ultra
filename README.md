@@ -25,8 +25,8 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/data
-      - ./items.conf:/items.conf
+      - ./data:/home/kiwix/data
+      - ./items.conf:/home/kiwix/data/items.conf
     environment:
       - UPDATE_INTERVAL_HOURS=24
       - KEEP_OLD_VERSIONS=1
@@ -66,8 +66,8 @@ EOF
 docker run -d \
   --name kiwix-with-updater \
   -p 8080:8080 \
-  -v "$(pwd)/data:/data" \
-  -v "$(pwd)/items.conf:/items.conf" \
+  -v "$(pwd)/data:/home/kiwix/data" \
+  -v "$(pwd)/items.conf:/home/kiwix/data/items.conf" \
   -e UPDATE_INTERVAL_HOURS=24 \
   -e KEEP_OLD_VERSIONS=1 \
   -e WAIT_FOR_FIRST=1 \
@@ -76,12 +76,39 @@ docker run -d \
 
 ## Configuration
 
+### Directory Structure
+
+The container uses a conventional home directory structure:
+
+- `/home/kiwix/` - User home directory (owned by user 10001:10001)
+- `/home/kiwix/data/` - Application data directory (mounted volume)
+- `/home/kiwix/data/zim/` - ZIM files storage
+- `/home/kiwix/data/library.xml` - Kiwix library file
+- `/home/kiwix/data/items.conf` - Items configuration file
+
+### Permissions
+
+The container runs as user `10001:10001` (`kiwix:kiwix`). For proper operation:
+
+- **Recommended**: Ensure your host data directory is owned by UID:GID `10001:10001`
+- **Alternative**: Run with `--user 10001:10001` flag
+- **Less secure**: Run as root with `--user 0:0`
+
+```bash
+# Fix host directory permissions (recommended)
+sudo chown -R 10001:10001 ./data
+
+# Or run with user flag
+docker run --user 10001:10001 ...
+```
+
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DEST` | `/data/zim` | Directory to store ZIM files |
-| `LIBRARY` | `/data/library.xml` | Path to Kiwix library file |
+| `DEST` | `/home/kiwix/data/zim` | Directory to store ZIM files |
+| `LIBRARY` | `/home/kiwix/data/library.xml` | Path to Kiwix library file |
+| `ITEMS_PATH` | `/home/kiwix/data/items.conf` | Path to items configuration file |
 | `UPDATE_INTERVAL_HOURS` | `24` | How often to check for updates (hours) |
 | `KEEP_OLD_VERSIONS` | `0` | Number of old versions to keep per prefix |
 | `PORT` | `8080` | Port for Kiwix server |
@@ -157,16 +184,18 @@ COPY items.conf /items.conf
 RUN chmod +x /entrypoint.sh
 
 # Set default environment variables
-ENV DEST=/data/zim \
-    LIBRARY=/data/library.xml \
+ENV DEST=/home/kiwix/data/zim \
+    LIBRARY=/home/kiwix/data/library.xml \
+    ITEMS_PATH=/home/kiwix/data/items.conf \
     HTTP_BASE=https://download.kiwix.org/zim \
     UPDATE_INTERVAL_HOURS=24 \
     KEEP_OLD_VERSIONS=0 \
     ITEM_DELAY_SECONDS=5 \
-    PORT=8080
+    PORT=8080 \
+    HOME=/home/kiwix
 
 # Expose volume and port
-VOLUME ["/data"]
+VOLUME ["/home/kiwix/data"]
 EXPOSE 8080
 
 # Set entrypoint
@@ -181,8 +210,8 @@ Run a one-time sync without starting the server:
 
 ```bash
 docker run --rm \
-  -v "$(pwd)/data:/data" \
-  -v "$(pwd)/items.conf:/items.conf" \
+  -v "$(pwd)/data:/home/kiwix/data" \
+  -v "$(pwd)/items.conf:/home/kiwix/data/items.conf" \
   kiwix-with-updater --oneshot
 ```
 
@@ -192,7 +221,7 @@ docker run --rm \
 docker run -d \
   --name kiwix-custom \
   -p 8080:8080 \
-  -v "$(pwd)/data:/data" \
+  -v "$(pwd)/data:/home/kiwix/data" \
   -e ITEMS="wikipedia wikipedia_en_top
 wiktionary wiktionary_en_all
 gutenberg gutenberg_en_all" \
@@ -208,9 +237,9 @@ gutenberg gutenberg_en_all" \
 # Mount the source code for development
 docker run -it --rm \
   -p 8080:8080 \
-  -v "$(pwd)/data:/data" \
+  -v "$(pwd)/data:/home/kiwix/data" \
   -v "$(pwd)/entrypoint.sh:/entrypoint.sh" \
-  -v "$(pwd)/items.conf:/items.conf" \
+  -v "$(pwd)/items.conf:/home/kiwix/data/items.conf" \
   kiwix-with-updater
 ```
 
@@ -230,10 +259,10 @@ docker logs --tail 100 kiwix-with-updater
 
 ```bash
 # List downloaded ZIM files
-docker exec kiwix-with-updater ls -la /data/zim/
+docker exec kiwix-with-updater ls -la /home/kiwix/data/zim/
 
 # Check library status
-docker exec kiwix-with-updater kiwix-manage /data/library.xml show
+docker exec kiwix-with-updater kiwix-manage /home/kiwix/data/library.xml show
 ```
 
 ## Troubleshooting

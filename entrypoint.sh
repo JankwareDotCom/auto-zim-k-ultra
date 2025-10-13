@@ -26,16 +26,25 @@ log(){ echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
 # Ensure directories exist and are writable
 ensure_writable_dir() {
   local dir="$1"
+  
+  # First try to create the directory
   if ! mkdir -p "$dir" 2>/dev/null; then
     log "ERROR: Cannot create directory: $dir"
     log "This usually means /data is mounted read-only or has permission issues."
+    log "Current user: $(id -u):$(id -g)"
     log "Please ensure /data is mounted with proper write permissions for user $(id -u):$(id -g)"
+    log "Fix with: chown -R $(id -u):$(id -g) /path/to/host/data/directory"
+    log "Or run container with: --user $(id -u):$(id -g)"
     exit 1
   fi
+  
+  # Then check if it's writable
   if ! [ -w "$dir" ]; then
     log "ERROR: Directory not writable: $dir"
     log "Current user: $(id -u):$(id -g)"
     log "Directory permissions: $(ls -ld "$dir" 2>/dev/null || echo "cannot stat")"
+    log "Please fix permissions with: chown -R $(id -u):$(id -g) /path/to/host/data/directory"
+    log "Or run container with: --user $(id -u):$(id -g)"
     exit 1
   fi
 }
