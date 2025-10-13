@@ -14,7 +14,7 @@ RUN if command -v apk >/dev/null 2>&1; then \
     elif command -v apt-get >/dev/null 2>&1; then \
       export DEBIAN_FRONTEND=noninteractive; \
       groupadd --gid 10001 kiwix || true; \
-      useradd --uid 10001 --gid 10001 --create-home --home-dir /home/kiwix --shell /usr/sbin/nologin kiwix; \
+      useradd --uid 10001 --gid 10001 --create-home --home-dir /data --shell /usr/sbin/nologin kiwix; \
       apt-get update; \
       apt-get install -y --no-install-recommends bash curl ca-certificates; \
       rm -rf /var/lib/apt/lists/*; \
@@ -54,7 +54,7 @@ ENV APP_UMASK=027
 USER 10001:10001
 
 # Keep the working directory non-root owned
-WORKDIR /home/kiwix
+WORKDIR /data
 
 # Prepare writable mount and own it
 VOLUME ["/data"]
@@ -68,7 +68,7 @@ ENV DEST=/data/zim \
     ITEM_DELAY_SECONDS=5 \
     ITEMS_PATH=/data/items.conf \
     PORT=8080 \
-    HOME=/home/kiwix
+    HOME=/data
 
 # Copy entrypoint with tight permissions and correct ownership
 # (Use --chmod/--chown so we don’t need an extra layer to chmod/chown)
