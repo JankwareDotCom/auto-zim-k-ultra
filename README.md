@@ -13,16 +13,16 @@ A Docker container that automatically downloads and serves ZIM files using Kiwix
 
 ## Quick Start
 
-### Zero-Config Setup (Recommended for Lazy People 😉)
+### Super Simple Setup (Just Works™️)
 
-Just run as root - the container automatically drops privileges and fixes permissions:
+Create your `docker-compose.yml`:
 
 ```yaml
 version: '3.8'
 services:
   kiwix:
     image: ghcr.io/egiraffe/kiwix-with-updater:latest
-    user: "0:0"  # Run as root - container handles security automatically
+    user: "$(id -u):$(id -g)"  # Use your current user ID
     ports:
       - "8080:8080"
     volumes:
@@ -34,32 +34,28 @@ services:
     restart: unless-stopped
 ```
 
-**That's it!** No permission fixing, no user ID matching, no manual setup. The container:
-- ✅ Automatically fixes file permissions
-- ✅ Drops to non-root user for security  
-- ✅ Just works™️
+**That's it!** The container automatically:
+- ✅ Adapts to your user ID
+- ✅ Fixes permissions automatically
+- ✅ No building required
+- ✅ Secure (runs as your user, not root)
 
-### Advanced: Custom User ID (For Security Purists)
+### Alternative: PUID/PGID Environment Variables
 
-If you want to avoid root entirely, build with your user ID:
-
-```bash
-# Build with your current user ID
-docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t kiwix-updater .
-```
-
-Then use without the `user: "0:0"` line:
+If the above doesn't work, you can also use:
 
 ```yaml
 version: '3.8'
 services:
   kiwix:
-    image: kiwix-updater  # Your locally built image
+    image: ghcr.io/egiraffe/kiwix-with-updater:latest
     ports:
       - "8080:8080"
     volumes:
       - ./data:/home/app/data
     environment:
+      - PUID=1000  # Your user ID
+      - PGID=1000  # Your group ID
       - UPDATE_INTERVAL_HOURS=24
       - KEEP_OLD_VERSIONS=1
       - WAIT_FOR_FIRST=1
@@ -121,29 +117,37 @@ The container uses a conventional home directory structure:
 
 ### Permissions
 
-**TL;DR: Just use `user: "0:0"` and forget about permissions! 🎉**
+**TL;DR: Just use `user: "$(id -u):$(id -g)"` and it works! 🎉**
 
-The container automatically handles permissions for you:
+The container automatically adapts to your user:
 
-#### Option 1: Zero-Config (Recommended)
+#### Method 1: User Flag (Recommended)
 ```yaml
 services:
   kiwix:
-    user: "0:0"  # Container auto-fixes permissions and drops privileges
-```
-- ✅ No manual permission fixing required
-- ✅ Container automatically drops to non-root user  
-- ✅ Secure and effortless
-
-#### Option 2: Custom User ID (For Purists)
-```bash
-# Build with your user ID to avoid root entirely
-docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t kiwix-updater .
+    image: ghcr.io/egiraffe/kiwix-with-updater:latest
+    user: "$(id -u):$(id -g)"  # Automatically uses your user ID
 ```
 
-#### Build Arguments
-- `USER_ID`: User ID to run as (default: 10001)
-- `GROUP_ID`: Group ID to run as (default: 10001)
+#### Method 2: PUID/PGID Environment Variables
+```yaml
+services:
+  kiwix:
+    image: ghcr.io/egiraffe/kiwix-with-updater:latest
+    environment:
+      - PUID=1000  # Your user ID
+      - PGID=1000  # Your group ID
+```
+
+#### How It Works
+- Container detects the runtime user ID
+- Automatically creates matching user inside container
+- Fixes file permissions on startup
+- No building, no manual chown commands needed!
+
+#### Environment Variables for User Management
+- `PUID`: User ID to run as (when running as root)
+- `PGID`: Group ID to run as (when running as root)
 
 ### Environment Variables
 

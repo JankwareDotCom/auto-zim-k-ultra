@@ -1,24 +1,14 @@
 FROM ghcr.io/kiwix/kiwix-tools:3.7.0 AS kiwix_base
 FROM kiwix_base
 
-# Accept build args for user/group IDs to match host user
-ARG USER_ID=10001
-ARG GROUP_ID=10001
-
 # Use a consistent, safer shell for build steps
 SHELL ["/bin/sh", "-eux", "-c"]
 
-# Minimal runtime deps + non-root user creation for both Alpine and Debian/Ubuntu
-# - Installs: bash (for your script if it uses bashisms), curl (healthcheck), ca-certs
-# - Creates dedicated user/group with a stable UID/GID that won't collide with system users
-# - Cleans up package lists
+# Install runtime dependencies - no user creation yet, we'll do that dynamically
 RUN if command -v apk >/dev/null 2>&1; then \
-      addgroup -g ${GROUP_ID} -S app && adduser -S -D -u ${USER_ID} -G app -h /home/app app; \
-      apk add --no-cache bash coreutils curl ca-certificates; \
+      apk add --no-cache bash coreutils curl ca-certificates shadow; \
     elif command -v apt-get >/dev/null 2>&1; then \
       export DEBIAN_FRONTEND=noninteractive; \
-      groupadd --gid ${GROUP_ID} app || true; \
-      useradd --uid ${USER_ID} --gid ${GROUP_ID} --create-home --home-dir /home/app --shell /usr/sbin/nologin app; \
       apt-get update; \
       apt-get install -y --no-install-recommends bash curl ca-certificates; \
       rm -rf /var/lib/apt/lists/*; \
@@ -28,34 +18,59 @@ RUN if command -v apk >/dev/null 2>&1; then \
     # Make sure CA bundle is registered if the base supports it (no-op otherwise)
     (command -v update-ca-certificates >/dev/null 2>&1 && update-ca-certificates || true)
 
-# Ensure home directory exists, is owned by the runtime user, and is SGID + group-writable
-# SGID (2) on dirs ⇒ new files/dirs inherit the group
+# Create the app directory structure - ownership will be set dynamically
 RUN mkdir -p /home/app/data /home/app/data/zim && \
-    chown -R ${USER_ID}:${GROUP_ID} /home/app && \
-    chmod -R 2770 /home/app
+    chmod -R 777 /home/app
 
-# Create an init script that automatically handles permissions
+# Create a smart init script that adapts to the runtime user
 RUN printf '#!/bin/sh\n\
-# Always try to fix permissions if running as root or if we can sudo\n\
-if [ "$(id -u)" = "0" ]; then\n\
-    echo "[init] Running as root, fixing permissions and dropping to user app..."\n\
-    chown -R %s:%s /home/app 2>/dev/null || true\n\
-    exec su -s /bin/sh -c "exec \\"$@\\"" app -- "$@"\n\
-elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then\n\
-    echo "[init] Attempting to fix permissions with sudo..."\n\
-    sudo chown -R %s:%s /home/app/data 2>/dev/null || true\n\
-elif [ ! -w /home/app/data ] 2>/dev/null; then\n\
-    echo "[init] Permission issue detected. Starting as root to auto-fix permissions..."\n\
-    echo "[init] Tip: Add user: \"0:0\" to your docker-compose.yml to avoid this message"\n\
-    # This will fail gracefully - the entrypoint will provide helpful error messages\n\
+# Smart initialization that works with any user ID\n\
+RUNTIME_UID=$(id -u)\n\
+RUNTIME_GID=$(id -g)\n\
+\n\
+if [ "$RUNTIME_UID" = "0" ]; then\n\
+    echo "[init] Running as root - will create user and drop privileges"\n\
+    # Create a user matching a common ID or use 1000 as fallback\n\
+    TARGET_UID=${PUID:-1000}\n\
+    TARGET_GID=${PGID:-1000}\n\
+    \n\
+    # Create group and user if they do not exist\n\
+    if ! getent group $TARGET_GID >/dev/null 2>&1; then\n\
+        groupadd -g $TARGET_GID app 2>/dev/null || true\n\
+    fi\n\
+    if ! getent passwd $TARGET_UID >/dev/null 2>&1; then\n\
+        useradd -u $TARGET_UID -g $TARGET_GID -d /home/app -s /bin/sh app 2>/dev/null || true\n\
+    fi\n\
+    \n\
+    # Fix ownership\n\
+    chown -R $TARGET_UID:$TARGET_GID /home/app 2>/dev/null || true\n\
+    echo "[init] Dropping to user $TARGET_UID:$TARGET_GID"\n\
+    exec su -s /bin/sh -c "exec \\"$@\\"" "#$TARGET_UID" -- "$@"\n\
+else\n\
+    echo "[init] Running as user $RUNTIME_UID:$RUNTIME_GID"\n\
+    # Fix ownership to match current user\n\
+    if [ -w /home/app ]; then\n\
+        chown -R $RUNTIME_UID:$RUNTIME_GID /home/app 2>/dev/null || true\n\
+    fi\n\
+    # Ensure data directory exists and is writable\n\
+    mkdir -p /home/app/data/zim/.tmp 2>/dev/null || true\n\
+    if [ ! -w /home/app/data ]; then\n\
+        echo "[init] ERROR: /home/app/data not writable by user $RUNTIME_UID:$RUNTIME_GID"\n\
+        echo "[init] "\n\
+        echo "[init] SOLUTIONS:"\n\
+        echo "[init] 1. Run with: docker run --user \$(id -u):\$(id -g) ..."\n\
+        echo "[init] 2. Or fix host permissions: chown -R \$(id -u):\$(id -g) ./data"\n\
+        echo "[init] 3. Or set PUID/PGID: -e PUID=\$(id -u) -e PGID=\$(id -g)"\n\
+        echo "[init] "\n\
+        exit 1\n\
+    fi\n\
 fi\n\
-exec "$@"\n' "${USER_ID}" "${GROUP_ID}" "${USER_ID}" "${GROUP_ID}" > /init.sh && \
+exec "$@"\n' > /init.sh && \
     chmod +x /init.sh
 
 ENV APP_UMASK=027
 
-# Drop root
-USER ${USER_ID}:${GROUP_ID}
+# Don't set a specific user - let the init script handle it dynamically
 
 # Set home directory as working directory
 WORKDIR /home/app
@@ -76,7 +91,7 @@ ENV DEST=/home/app/data/zim \
 
 # Copy entrypoint with tight permissions and correct ownership
 # (Use --chmod/--chown so we don’t need an extra layer to chmod/chown)
-COPY --chown=${USER_ID}:${GROUP_ID} --chmod=0555 entrypoint.sh /entrypoint.sh
+COPY --chmod=0755 entrypoint.sh /entrypoint.sh
 
 EXPOSE 8080/tcp
 
