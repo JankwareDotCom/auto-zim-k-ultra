@@ -1,4 +1,4 @@
-FROM ghcr.io/kiwix/kiwix-tools:3.7.0 AS kiwix_base
+FROM ghcr.io/kiwix/kiwix-tools:3.8.0 AS kiwix_base
 FROM kiwix_base
 
 # Use a consistent, safer shell for build steps
