@@ -47,7 +47,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/${{ github.repository_owner }}/kiwix-with-updater
+          images: ghcr.io/${{ github.repository_owner }}/auto-zim-k-ultra
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
