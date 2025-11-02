@@ -7,9 +7,6 @@ permissions:
 
 jobs:
   automerge:
-    if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: fastify/github-action-merge-dependabot@v3
-        with:
-          target: minor
