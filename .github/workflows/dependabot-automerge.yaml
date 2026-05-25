@@ -8,15 +8,19 @@ permissions:
 jobs:
   automerge:
     runs-on: ubuntu-latest
-    if: github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]'
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     steps:
       - uses: actions/github-script@v8
         with:
           script: |
             const pull_number = context.payload.pull_request.number
-            await github.rest.pulls.merge({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number,
-              merge_method: 'squash'
-            })
+            try {
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number,
+                merge_method: 'squash'
+              })
+            } catch (error) {
+              core.setFailed(`Failed to merge pull request #${pull_number}: ${error.message}`)
+            }
