@@ -13,14 +13,14 @@ jobs:
       - uses: actions/github-script@v8
         with:
           script: |
-            const pull_number = context.payload.pull_request.number
+            const pullNumber = context.payload.pull_request.number
             try {
               await github.rest.pulls.merge({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                pull_number,
+                pull_number: pullNumber,
                 merge_method: 'squash'
               })
             } catch (error) {
-              core.setFailed(`Failed to merge pull request #${pull_number}: ${error.message}`)
+              core.setFailed(`Failed to merge pull request #${pullNumber}: ${error.message}`)
             }
